@@ -1,46 +1,24 @@
-/**
- * react-native-swiper
- * @author leecade<leecade@163.com>
- */
-import React from 'react'
-import ReactNative, {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
+import React from 'react';
+import {
+  Animated,
   Dimensions,
+  PanResponder,
+  View,
+  StyleSheet,
+  Platform,
   TouchableOpacity,
-  ViewPagerAndroid,
-  Platform
-} from 'react-native'
+  Text,
+} from 'react-native';
 
-// Using bare setTimeout, setInterval, setImmediate
-// and requestAnimationFrame calls is very dangerous
-// because if you forget to cancel the request before
-// the component is unmounted, you risk the callback
-// throwing an exception.
-import TimerMixin from 'react-timer-mixin'
-
-let { width, height } = Dimensions.get('window')
-
-/**
- * Default styles
- * @type {StyleSheetPropType}
- */
-let styles = StyleSheet.create({
+const styles = StyleSheet.create({
   container: {
-    backgroundColor: 'transparent',
-    position: 'relative',
+    flex: 1,
+    overflow: 'hidden',
   },
-
-  wrapper: {
-    backgroundColor: 'transparent',
+  sceneContainerBase: {
+    flex: 1,
+    flexDirection: 'row',
   },
-
-  slide: {
-    backgroundColor: 'transparent',
-  },
-
   pagination_x: {
     position: 'absolute',
     bottom: 25,
@@ -50,7 +28,7 @@ let styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor:'transparent',
+    backgroundColor: 'transparent',
   },
 
   pagination_y: {
@@ -62,7 +40,7 @@ let styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor:'transparent',
+    backgroundColor: 'transparent',
   },
 
   title: {
@@ -75,6 +53,9 @@ let styles = StyleSheet.create({
     flexWrap: 'nowrap',
     width: 250,
     backgroundColor: 'transparent',
+
+    borderColor: 'rgb(255,0,0)',
+    borderWidth: 1,
   },
 
   buttonWrapper: {
@@ -87,7 +68,7 @@ let styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 10,
     justifyContent: 'space-between',
-    alignItems: 'center'
+    alignItems: 'center',
   },
 
   buttonText: {
@@ -95,395 +76,288 @@ let styles = StyleSheet.create({
     color: '#007aff',
     fontFamily: 'Arial',
   },
-})
 
-// missing `module.exports = exports['default'];` with babel6
-// export default React.createClass({
-module.exports = React.createClass({
-
-  /**
-   * Props Validation
-   * @type {Object}
-   */
-  propTypes: {
-    horizontal                       : React.PropTypes.bool,
-    children                         : React.PropTypes.node.isRequired,
-    style                            : View.propTypes.style,
-    pagingEnabled                    : React.PropTypes.bool,
-    showsHorizontalScrollIndicator   : React.PropTypes.bool,
-    showsVerticalScrollIndicator     : React.PropTypes.bool,
-    bounces                          : React.PropTypes.bool,
-    scrollsToTop                     : React.PropTypes.bool,
-    removeClippedSubviews            : React.PropTypes.bool,
-    automaticallyAdjustContentInsets : React.PropTypes.bool,
-    showsPagination                  : React.PropTypes.bool,
-    showsButtons                     : React.PropTypes.bool,
-    loop                             : React.PropTypes.bool,
-    autoplay                         : React.PropTypes.bool,
-    autoplayTimeout                  : React.PropTypes.number,
-    autoplayDirection                : React.PropTypes.bool,
-    index                            : React.PropTypes.number,
-    renderPagination                 : React.PropTypes.func,
+  activeDot: {
+    backgroundColor: '#007aff',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 3,
+    marginRight: 3,
+    marginTop: 3,
+    marginBottom: 3,
   },
 
-  mixins: [TimerMixin],
+  notActiveDot: {
+    backgroundColor: 'rgba(0,0,0,.2)',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginLeft: 3,
+    marginRight: 3,
+    marginTop: 3,
+    marginBottom: 3,
+  },
+});
 
-  /**
-   * Default props
-   * @return {object} props
-   * @see http://facebook.github.io/react-native/docs/scrollview.html
-   */
-  getDefaultProps() {
-    return {
-      horizontal                       : true,
-      pagingEnabled                    : true,
-      showsHorizontalScrollIndicator   : false,
-      showsVerticalScrollIndicator     : false,
-      bounces                          : false,
-      scrollsToTop                     : false,
-      removeClippedSubviews            : true,
-      automaticallyAdjustContentInsets : false,
-      showsPagination                  : true,
-      showsButtons                     : false,
-      loop                             : true,
-      autoplay                         : false,
-      autoplayTimeout                  : 2.5,
-      autoplayDirection                : true,
-      index                            : 0,
+import TimerMixin from 'react-timer-mixin';
+import reactMixin from 'react-mixin';
+
+const window = Dimensions.get('window');
+
+const windowWidth = window.width;
+const windowHeight = window.height;
+
+const vw = windowWidth / 100;
+const vh = windowHeight / 100;
+
+class Swiper extends React.Component {
+  constructor(props) {
+    super(props);
+
+    this.onPanResponderMoveH = this.onPanResponderMoveH.bind(this);
+    this.onMoveShouldSetPanResponderH = this.onMoveShouldSetPanResponderH.bind(this);
+    this.onReleasePanResponderH = this.onReleasePanResponderH.bind(this);
+
+    this.onPanResponderMoveV = this.onPanResponderMoveV.bind(this);
+    this.onMoveShouldSetPanResponderV = this.onMoveShouldSetPanResponderV.bind(this);
+    this.onReleasePanResponderV = this.onReleasePanResponderV.bind(this);
+
+    const offset = props.horizontal ? this.getScrollPageOffsetH() : this.getScrollPageOffsetV();
+
+    this.vxThreshold = Platform.os === 'ios' ? 0.5 : 0.0000001;
+
+    const totalChildren = Array.isArray(props.children) ? props.children.length || 1 : 0;
+
+    this.state = {
+      index: props.index,
+      total: totalChildren,
+      scrollValue: new Animated.Value(props.index),
+      dir: props.horizontal === false ? 'y' : 'x',
+    };
+
+    this.state.scrollValue.setOffset(offset);
+
+    if (props.horizontal) {
+      this.panResponder = PanResponder.create({
+        onMoveShouldSetPanResponder: this.onMoveShouldSetPanResponderH,
+        onPanResponderRelease: this.onReleasePanResponderH,
+        onPanResponderTerminate: this.onReleasePanResponderH,
+        onPanResponderMove: this.onPanResponderMoveH,
+      });
+    } else {
+      this.panResponder = PanResponder.create({
+        onMoveShouldSetPanResponder: this.onMoveShouldSetPanResponderV,
+        onPanResponderRelease: this.onReleasePanResponderV,
+        onPanResponderTerminate: this.onReleasePanResponderV,
+        onPanResponderMove: this.onPanResponderMoveV,
+      });
     }
-  },
-
-  /**
-   * Init states
-   * @return {object} states
-   */
-  getInitialState() {
-    return this.initState(this.props)
-  },
-
-  /**
-   * autoplay timer
-   * @type {null}
-   */
-  autoplayTimer: null,
-
-  componentWillReceiveProps(props) {
-    this.setState(this.initState(props))
-  },
+  }
 
   componentDidMount() {
-    this.autoplay()
-  },
+    this.autoplay();
+  }
 
-  initState(props) {
-    // set the current state
-    const state = this.state || {}
+  onReleasePanResponderH(e, gestureState) {
+    const relativeGestureDistance = gestureState.dx / windowWidth;
+    const { vx } = gestureState;
 
-    let initState = {
-      isScrolling: false,
-      autoplayEnd: false,
-      loopJump: false,
+    const newIndex = this.updateIndex(this.state.index, vx, relativeGestureDistance);
+
+    this.scrollTo(newIndex);
+  }
+
+  onReleasePanResponderV(e, gestureState) {
+    const relativeGestureDistance = gestureState.dy / windowHeight;
+    const { vy } = gestureState;
+
+    const newIndex = this.updateIndex(this.state.index, vy, relativeGestureDistance);
+
+    this.scrollTo(newIndex);
+  }
+
+  onMoveShouldSetPanResponderH(e, gestureState) {
+    const { threshold, scrollEnabled } = this.props;
+
+    if (!scrollEnabled) {
+      return false;
     }
 
-    initState.total = props.children ? props.children.length || 1 : 0
-
-    if (state.total === initState.total) {
-      // retain the index
-      initState.index = state.index
-    } else {
-      // reset the index
-      initState.index = initState.total > 1 ? Math.min(props.index, initState.total - 1) : 0
+    if (Math.abs(gestureState.dx) > Math.abs(gestureState.dy)) {
+      this.props.onScrollBeginDrag();
+      return true;
     }
 
-    // Default: horizontal
-    initState.dir = props.horizontal === false ? 'y' : 'x'
-    initState.width = props.width || width
-    initState.height = props.height || height
-    initState.offset = {}
-
-    if (initState.total > 1) {
-      var setup = initState.index
-      if ( props.loop ) {
-        setup++
-      }
-      initState.offset[initState.dir] = initState.dir === 'y'
-        ? initState.height * setup
-        : initState.width * setup
+    if (threshold - Math.abs(gestureState.dx) > 0) {
+      return false;
     }
-    return initState
-  },
+    return false;
+  }
 
-	loopJump: function loopJump(){
-    if(this.state.loopJump){
-      var i = this.state.index + (this.props.loop ? 1 : 0);
-      setTimeout(() => this.refs.scrollView.setPageWithoutAnimation && this.refs.scrollView.setPageWithoutAnimation(i), 50);
+  onMoveShouldSetPanResponderV(e, gestureState) {
+    const { threshold, scrollEnabled } = this.props;
+
+    if (!scrollEnabled) {
+      return false;
     }
-  },
 
-  /**
-   * Automatic rolling
-   */
+    if (Math.abs(gestureState.dy) > Math.abs(gestureState.dx)) {
+      this.props.onScrollBeginDrag();
+      return true;
+    }
+
+    if (threshold - Math.abs(gestureState.dy) > 0) {
+      return false;
+    }
+    return false;
+  }
+
+  onPanResponderMoveH(e, gestureState) {
+    const dx = gestureState.dx;
+    const offsetX = -dx / this.props.pageWidth + this.state.index;
+
+    if (offsetX >= 0 && offsetX < this.props.children.length - 1) {
+      this.state.scrollValue.setValue(offsetX);
+    }
+  }
+
+  onPanResponderMoveV(e, gestureState) {
+    const dy = gestureState.dy;
+    const offsetY = -dy / this.props.pageHeight + this.state.index;
+
+    if (offsetY >= 0 && offsetY < this.props.children.length - 1) {
+      this.state.scrollValue.setValue(offsetY);
+    }
+  }
+
+  onScrollEnd(status) {
+    this.props.onMomentumScrollEnd(null, status, this);
+
+    setTimeout(() => {
+      this.autoplay();
+    });
+  }
+
+  getScrollPageOffsetH() {
+    if (this.props.pageWidth === windowWidth) {
+      return 0;
+    }
+    const offsetWindowRatio = (windowWidth - this.props.pageWidth) / vw / 2 / 100;
+    const scaleToPageRatio = windowWidth / this.props.pageWidth;
+
+    return - offsetWindowRatio * scaleToPageRatio;
+  }
+
+  getScrollPageOffsetV() {
+    if (this.props.pageHeight === windowHeight) {
+      return 0;
+    }
+    const offsetWindowRatio = (windowHeight - this.props.pageHeight) / vh / 2 / 100;
+    const scaleToPageRatio = windowHeight / this.props.pageHeight;
+
+    return - offsetWindowRatio * scaleToPageRatio;
+  }
+
+  updateIndex(index, vx, relativeGestureDistance) {
+    const distanceThreshold = 0.5;
+
+    if (relativeGestureDistance < - distanceThreshold ||
+        (relativeGestureDistance < 0 && vx <= - this.vxThreshold)) {
+      return index + 1;
+    }
+
+    if (relativeGestureDistance > distanceThreshold ||
+        (relativeGestureDistance > 0 && vx >= this.vxThreshold)) {
+      return index - 1;
+    }
+    return index;
+  }
+
+  scrollTo(pageNumber) {
+    //    const newPageNumber = Math.max(0, Math.min(pageNumber, this.props.children.length - 1));
+    const newPageNumber = pageNumber >= 0 ? pageNumber % this.state.total : this.props.children.length - 1;
+    this.setState({
+      index: newPageNumber,
+    });
+
+    Animated.timing(this.state.scrollValue,
+                    { toValue: newPageNumber, duration: this.props.scrollDurationMs }).start();
+
+    const status = Object.assign({}, this.state, { index: newPageNumber });
+
+    this.onScrollEnd(status);
+  }
+
+  scrollBy(indexOffset) {
+    this.scrollTo(this.state.index + indexOffset);
+  }
+
   autoplay() {
-    if(
-      !Array.isArray(this.props.children)
-      || !this.props.autoplay
-      || this.state.isScrolling
-      || this.state.autoplayEnd
+    if (!Array.isArray(this.props.children)
+        || !this.props.autoplay
     ) {
-      return
+      return;
     }
 
-    clearTimeout(this.autoplayTimer)
+    clearTimeout(this.autoplayTimer);
 
-    this.autoplayTimer = this.setTimeout(() => {
-      if(
-        !this.props.loop && (
-          this.props.autoplayDirection
-            ? this.state.index === this.state.total - 1
-            : this.state.index === 0
-        )
-      ) {
-        return this.setState({ autoplayEnd: true })
-      }
+    this.autoplayTimer = setTimeout(() => {
+      this.scrollBy(this.props.autoplayDirection ? 1 : -1);
+    }, this.props.autoplayTimeout * 1000);
+  }
 
-      this.scrollBy(this.props.autoplayDirection ? 1 : -1)
-    }, this.props.autoplayTimeout * 1000)
-  },
-
-  /**
-   * Scroll begin handle
-   * @param  {object} e native event
-   */
-  onScrollBegin(e) {
-    // update scroll state
-    this.setState({ isScrolling: true })
-
-    this.setTimeout(() => {
-      this.props.onScrollBeginDrag && this.props.onScrollBeginDrag(e, this.state, this)
-    })
-  },
-
-  /**
-   * Scroll end handle
-   * @param  {object} e native event
-   */
-  onScrollEnd(e) {
-    // update scroll state
-    this.setState({
-      isScrolling: false
-    })
-
-    // making our events coming from android compatible to updateIndex logic
-    if (!e.nativeEvent.contentOffset) {
-      if (this.state.dir === 'x') {
-        e.nativeEvent.contentOffset = {x: e.nativeEvent.position * this.state.width}
-      } else {
-        e.nativeEvent.contentOffset = {y: e.nativeEvent.position * this.state.height}
-      }
-    }
-
-    this.updateIndex(e.nativeEvent.contentOffset, this.state.dir)
-
-    // Note: `this.setState` is async, so I call the `onMomentumScrollEnd`
-    // in setTimeout to ensure synchronous update `index`
-    this.setTimeout(() => {
-      this.autoplay()
-      this.loopJump();
-
-      // if `onMomentumScrollEnd` registered will be called here
-      this.props.onMomentumScrollEnd && this.props.onMomentumScrollEnd(e, this.state, this)
-    })
-  },
-
-  /*
-   * Drag end handle
-   * @param {object} e native event
-   */
-  onScrollEndDrag(e) {
-    let { contentOffset } = e.nativeEvent
-    let { horizontal, children } = this.props
-    let { offset, index } = this.state
-    let previousOffset = horizontal ? offset.x : offset.y
-    let newOffset = horizontal ? contentOffset.x : contentOffset.y
-
-    if (previousOffset === newOffset && (index === 0 || index === children.length - 1)) {
-      this.setState({
-        isScrolling: false
-      })
-    }
-  },
-
-  /**
-   * Update index after scroll
-   * @param  {object} offset content offset
-   * @param  {string} dir    'x' || 'y'
-   */
-  updateIndex(offset, dir) {
-
-    let state = this.state
-    let index = state.index
-    let diff = offset[dir] - state.offset[dir]
-    let step = dir === 'x' ? state.width : state.height
-    let loopJump = false;
-
-    // Do nothing if offset no change.
-    if(!diff) return
-
-    // Note: if touch very very quickly and continuous,
-    // the variation of `index` more than 1.
-    // parseInt() ensures it's always an integer
-    index = parseInt(index + Math.round(diff / step))
-
-    if(this.props.loop) {
-      if(index <= -1) {
-        index = state.total - 1
-        offset[dir] = step * state.total
-        loopJump = true;
-      }
-      else if(index >= state.total) {
-        index = 0
-        offset[dir] = step
-        loopJump = true;
-      }
-    }
-
-    this.setState({
-      index: index,
-      offset: offset,
-      loopJump: loopJump,
-    })
-  },
-
-  /**
-   * Scroll by index
-   * @param  {number} index offset index
-   */
-  scrollBy(index) {
-    if (this.state.isScrolling || this.state.total < 2) return
-    let state = this.state
-    let diff = (this.props.loop ? 1 : 0) + index + this.state.index
-    let x = 0
-    let y = 0
-    if(state.dir === 'x') x = diff * state.width
-    if(state.dir === 'y') y = diff * state.height
-
-    if (Platform.OS === 'android') {
-      this.refs.scrollView && this.refs.scrollView.setPage(diff)
-    } else {
-      this.refs.scrollView && this.refs.scrollView.scrollTo({ x, y })
-    }
-
-    // update scroll state
-    this.setState({
-      isScrolling: true,
-      autoplayEnd: false,
-    })
-
-    // trigger onScrollEnd manually in android
-    if (Platform.OS === 'android') {
-      this.setTimeout(() => {
-        this.onScrollEnd({
-          nativeEvent: {
-            position: diff,
-          }
-        });
-      }, 0);
-    }
-
-  },
-
-  scrollViewPropOverrides() {
-    var props = this.props
-    var overrides = {}
-
-    /*
-    const scrollResponders = [
-      'onMomentumScrollBegin',
-      'onTouchStartCapture',
-      'onTouchStart',
-      'onTouchEnd',
-      'onResponderRelease',
-    ]
-    */
-
-    for(let prop in props) {
-      // if(~scrollResponders.indexOf(prop)
-      if(typeof props[prop] === 'function'
-        && prop !== 'onMomentumScrollEnd'
-        && prop !== 'renderPagination'
-        && prop !== 'onScrollBeginDrag'
-      ) {
-        let originResponder = props[prop]
-        overrides[prop] = (e) => originResponder(e, this.state, this)
-      }
-    }
-
-    return overrides
-  },
-
-  /**
-   * Render pagination
-   * @return {object} react-dom
-   */
-  renderPagination() {
-
+  renderDotPagination() {
     // By default, dots only show when `total` > 2
-    if(this.state.total <= 1) return null
+    if (this.state.total <= 1) return null;
 
-    let dots = []
-    let ActiveDot = this.props.activeDot || <View style={{
-            backgroundColor: '#007aff',
-            width: 8,
-            height: 8,
-            borderRadius: 4,
-            marginLeft: 3,
-            marginRight: 3,
-            marginTop: 3,
-            marginBottom: 3,
-          }} />;
-    let Dot = this.props.dot || <View style={{
-            backgroundColor:'rgba(0,0,0,.2)',
-            width: 8,
-            height: 8,
-            borderRadius: 4,
-            marginLeft: 3,
-            marginRight: 3,
-            marginTop: 3,
-            marginBottom: 3,
-          }} />;
-    for(let i = 0; i < this.state.total; i++) {
+    let dots = [];
+    const ActiveDot = this.props.activeDot || <View style={styles.activeDot} />;
+    const Dot = this.props.dot || <View style={styles.notActiveDot} />;
+
+    for (let i = 0; i < this.state.total; i++) {
       dots.push(i === this.state.index
-        ?
-        React.cloneElement(ActiveDot, {key: i})
-        :
-        React.cloneElement(Dot, {key: i})
-      )
+              ? React.cloneElement(ActiveDot, { key: i })
+              : React.cloneElement(Dot, { key: i })
+      );
     }
 
     return (
-      <View pointerEvents='none' style={[styles['pagination_' + this.state.dir], this.props.paginationStyle]}>
+      <View
+        pointerEvents={'none'}
+        style={[styles['pagination_' + this.state.dir],
+                this.props.paginationStyle]}
+      >
         {dots}
       </View>
-    )
-  },
+    );
+  }
+
+  renderPagination() {
+    if (!this.props.showPagination) return null;
+
+    if (this.props.renderPagination) {
+      return this.props.renderPagination(this.state.index, this.props.children.length);
+    }
+    return this.renderDotPagination();
+  }
 
   renderTitle() {
-    let child = this.props.children[this.state.index]
-    let title = child && child.props && child.props.title
-    return title
-      ? (
-        <View style={styles.title}>
-          {this.props.children[this.state.index].props.title}
-        </View>
-      )
-      : null
-  },
+    const child = this.props.children[this.state.index];
+    const title = child && child.props && child.props.title;
+
+    return title ? (
+      <View style={styles.title}>
+        {this.props.children[this.state.index].props.title}
+      </View>
+    ) : null;
+  }
 
   renderNextButton() {
-    let button;
+    let button = null;
 
-    if (this.props.loop || this.state.index != this.state.total - 1) {
-      button = this.props.nextButton || <Text style={styles.buttonText}>›</Text>
+    if (this.props.loop || this.state.index !== this.state.total - 1) {
+      button = this.props.nextButton || <Text style={styles.buttonText}>›</Text>;
     }
 
     return (
@@ -492,14 +366,14 @@ module.exports = React.createClass({
           {button}
         </View>
       </TouchableOpacity>
-    )
-  },
+    );
+  }
 
   renderPrevButton() {
-    let button = null
+    let button = null;
 
-    if (this.props.loop || this.state.index != 0) {
-       button = this.props.prevButton || <Text style={styles.buttonText}>‹</Text>
+    if (this.props.loop || this.state.index !== 0) {
+      button = this.props.prevButton || <Text style={styles.buttonText}>‹</Text>;
     }
 
     return (
@@ -508,88 +382,120 @@ module.exports = React.createClass({
           {button}
         </View>
       </TouchableOpacity>
-    )
-  },
+    );
+  }
 
   renderButtons() {
     return (
-      <View pointerEvents='box-none' style={[styles.buttonWrapper, {width: this.state.width, height: this.state.height}, this.props.buttonWrapperStyle]}>
+      <View
+        pointerEvents="box-none"
+        style={[
+          styles.buttonWrapper,
+          { width: windowWidth, height: windowHeight },
+          this.props.buttonWrapperStyle,
+        ]}
+      >
         {this.renderPrevButton()}
         {this.renderNextButton()}
       </View>
-    )
-  },
+    );
+  }
 
-  renderScrollView(pages) {
-     if (Platform.OS === 'ios')
-         return (
-            <ScrollView ref="scrollView"
-             {...this.props}
-             {...this.scrollViewPropOverrides()}
-                       contentContainerStyle={[styles.wrapper, this.props.style]}
-                       contentOffset={this.state.offset}
-                       onScrollBeginDrag={this.onScrollBegin}
-                       onMomentumScrollEnd={this.onScrollEnd}
-                       onScrollEndDrag={this.onScrollEndDrag}>
-             {pages}
-            </ScrollView>
-         );
-      return (
-         <ViewPagerAndroid ref="scrollView"
-          {...this.props}
-            initialPage={this.props.loop ? this.state.index + 1 : this.state.index}
-            onPageSelected={this.onScrollEnd}
-            style={{flex: 1}}>
-            {pages}
-         </ViewPagerAndroid>
-      );
-  },
-
-  /**
-   * Default render
-   * @return {object} react-dom
-   */
   render() {
-    let state = this.state
-    let props = this.props
-    let children = props.children
-    let index = state.index
-    let total = state.total
-    let loop = props.loop
-    let dir = state.dir
-    let key = 0
+    const pageStyle = {
+      width: this.props.pageWidth,
+      height: this.props.pageHeight,
+      backgroundColor: 'transparent',
+    };
 
-    let pages = []
-    let pageStyle = [{width: state.width, height: state.height}, styles.slide]
+    const pages = this.props.children.map((page, index) => (
+      <View style={pageStyle} key={index}>{page}</View>));
 
-    // For make infinite at least total > 1
-    if(total > 1) {
+    const translateX = this.state.scrollValue.interpolate({
+      inputRange: [0, 1], outputRange: [0, -this.props.pageWidth],
+    });
 
-      // Re-design a loop model for avoid img flickering
-      pages = Object.keys(children)
-      if(loop) {
-        pages.unshift(total - 1 + '')
-        pages.push('0')
-      }
+    const translateY = this.state.scrollValue.interpolate({
+      inputRange: [0, 1], outputRange: [0, -this.props.pageHeight],
+    });
 
-      pages = pages.map((page, i) =>
-        <View style={pageStyle} key={i}>{children[page]}</View>
-      )
-    }
-    else pages = <View style={pageStyle}>{children}</View>
+    const transform =
+    this.props.horizontal ? { transform: [{ translateX }] } : { transform: [{ translateY }] };
+
+    const sceneContainerStyle = {
+      flex: 1,
+      flexDirection: this.props.horizontal ? 'row' : 'column',
+      width: this.props.horizontal ? this.props.pageWidth * this.props.children.length : null,
+      height: this.props.horizontal ? null : this.props.pageHeight * this.props.children.length,
+    };
+
+    const title = this.renderTitle();
+    const buttons = this.renderButtons();
+    const pagination = this.renderPagination();
 
     return (
-      <View style={[styles.container, {
-        width: state.width,
-        height: state.height
-      }]}>
-        {this.renderScrollView(pages)}
-        {props.showsPagination && (props.renderPagination
-          ? this.props.renderPagination(state.index, state.total, this)
-          : this.renderPagination())}
-        {this.renderTitle()}
-        {this.props.showsButtons && this.renderButtons()}
+      <View
+        style={styles.container}
+      >
+        <Animated.View
+          {...this.panResponder.panHandlers}
+          style={[sceneContainerStyle, transform]}
+        >
+          {pages}
+        </Animated.View>
+        {pagination}
+        {title}
+        {buttons}
       </View>
-    )
+    );
   }
-})
+}
+
+Swiper.propTypes = {
+  children: React.PropTypes.node.isRequired,
+  index: React.PropTypes.number,
+  threshold: React.PropTypes.number,
+  onMomentumScrollEnd: React.PropTypes.func,
+  pageWidth: React.PropTypes.number,
+  pageHeight: React.PropTypes.number,
+  scrollDurationMs: React.PropTypes.number,
+  renderPagination: React.PropTypes.func,
+  onScrollBeginDrag: React.PropTypes.func,
+  scrollEnabled: React.PropTypes.bool,
+  horizontal: React.PropTypes.bool,
+  loop: React.PropTypes.bool,
+  autoplay: React.PropTypes.bool,
+  autoplayDirection: React.PropTypes.bool,
+  autoplayTimeout: React.PropTypes.number,
+  buttonWrapperStyle: View.propTypes.style,
+  prevButton: React.PropTypes.element,
+  nextButton: React.PropTypes.element,
+  showPagination: React.PropTypes.bool,
+  dot: React.PropTypes.element,
+  activeDot: React.PropTypes.element,
+};
+
+Swiper.defaultProps = {
+  index: 0,
+  threshold: 25,
+  onMomentumScrollEnd: () => {},
+  scrollDurationMs: 250,
+  renderPagination: null,
+  onScrollBeginDrag: () => {},
+  scrollEnabled: true,
+  pageWidth: windowWidth,
+  pageHeight: windowHeight,
+  horizontal: true,
+  loop: true,
+  autoplay: true,
+  autoplayDirection: true,
+  autoplayTimeout: 2.5,
+  buttonWrapperStyle: {},
+  prevButton: null,
+  nextButton: null,
+  showPagination: false,
+};
+
+reactMixin.onClass(Swiper, TimerMixin);
+
+module.exports = Swiper;
