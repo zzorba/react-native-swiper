@@ -28,6 +28,7 @@
     "babel-preset-react": "^6.11.1"
   },
   "dependencies": {
+    "react-mixin": "^3.0.5",
     "react-timer-mixin": "^0.13.3"
   }
 }
