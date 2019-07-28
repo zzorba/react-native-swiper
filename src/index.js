@@ -225,7 +225,7 @@ export default class extends Component {
     if (this.props.autoplay && !prevProps.autoplay) {
       this.autoplay()
     }
-    if (this.props.children !== prevProps.children) {
+    if (this.props.items !== prevProps.items) {
       this.setState(
         this.initState({ ...this.props, index: this.state.index }, true)
       )
@@ -238,17 +238,17 @@ export default class extends Component {
 
     const initState = {
       autoplayEnd: false,
-      children: null,
+      items: null,
       loopJump: false,
       offset: {}
     }
 
     // Support Optional render page
-    initState.children = Array.isArray(props.children)
-      ? props.children.filter(child => child)
-      : props.children
+    initState.items = Array.isArray(props.items)
+      ? props.items.filter(child => child)
+      : props.items
 
-    initState.total = initState.children ? initState.children.length || 1 : 0
+    initState.total = initState.items ? initState.items.length || 1 : 0
 
     if (state.total === initState.total && !updateIndex) {
       // retain the index
@@ -346,7 +346,7 @@ export default class extends Component {
    */
   autoplay = () => {
     if (
-      !Array.isArray(this.state.children) ||
+      !Array.isArray(this.state.items) ||
       !this.props.autoplay ||
       this.internals.isScrolling ||
       this.state.autoplayEnd
@@ -416,14 +416,14 @@ export default class extends Component {
   onScrollEndDrag = e => {
     const { contentOffset } = e.nativeEvent
     const { horizontal } = this.props
-    const { children, index } = this.state
+    const { items, index } = this.state
     const { offset } = this.internals
     const previousOffset = horizontal ? offset.x : offset.y
     const newOffset = horizontal ? contentOffset.x : contentOffset.y
 
     if (
       previousOffset === newOffset &&
-      (index === 0 || index === children.length - 1)
+      (index === 0 || index === items.length - 1)
     ) {
       this.internals.isScrolling = false
     }
@@ -695,11 +695,11 @@ export default class extends Component {
   }
 
   renderTitle = () => {
-    const child = this.state.children[this.state.index]
+    const child = this.state.items[this.state.index]
     const title = child && child.props && child.props.title
     return title ? (
       <View style={styles.title}>
-        {this.state.children[this.state.index].props.title}
+        {this.state.items[this.state.index].props.title}
       </View>
     ) : null
   }
@@ -795,7 +795,7 @@ export default class extends Component {
    * @return {object} react-dom
    */
   render() {
-    const { index, total, width, height, children } = this.state
+    const { index, total, width, height, items } = this.state
     const {
       containerStyle,
       loop,
@@ -804,7 +804,8 @@ export default class extends Component {
       loadMinimalLoader,
       renderPagination,
       showsButtons,
-      showsPagination
+      showsPagination,
+      renderItem,
     } = this.props
     // let dir = state.dir
     // let key = 0
@@ -823,7 +824,7 @@ export default class extends Component {
     // For make infinite at least total > 1
     if (total > 1) {
       // Re-design a loop model for avoid img flickering
-      pages = Object.keys(children)
+      pages = Object.keys(items)
       if (loop) {
         pages.unshift(total - 1 + '')
         pages.push('0')
@@ -837,7 +838,7 @@ export default class extends Component {
           ) {
             return (
               <View style={pageStyle} key={i}>
-                {children[page]}
+                {renderItem(items[page])}
               </View>
             )
           } else {
@@ -850,7 +851,7 @@ export default class extends Component {
         } else {
           return (
             <View style={pageStyle} key={i}>
-              {children[page]}
+              {renderItem(items[page])}
             </View>
           )
         }
@@ -858,7 +859,7 @@ export default class extends Component {
     } else {
       pages = (
         <View style={pageStyle} key={0}>
-          {children}
+          {items.map(renderItem)}
         </View>
       )
     }
