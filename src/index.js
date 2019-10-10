@@ -103,7 +103,7 @@ export default class extends Component {
    */
   static propTypes = {
     horizontal: PropTypes.bool,
-    children: PropTypes.node.isRequired,
+    children: PropTypes.node,
     containerStyle: PropTypes.oneOfType([PropTypes.object, PropTypes.number]),
     style: PropTypes.oneOfType([
       PropTypes.object,
